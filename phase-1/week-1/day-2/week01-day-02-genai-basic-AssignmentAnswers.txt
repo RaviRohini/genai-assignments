@@ -1,0 +1,122 @@
+1) Find 10 different model providers and their models released in last 12 months
+Details to collect:
+Model Provider | Model | Release Date | Cut off Date | Cost of tokens | Context Window | Type | When to use this model |
+
+
+Answer:
++----------------+----------------------+--------------+----------------+--------------------------------------------------------------+---------------------------+------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
+| Model Provider | Model                | Release Date | Cutoff Date    | Cost of tokens 1M tokens (In/Out)                            | Context Window            | Type                                                                         | When to Use                                                                                                                  |
++----------------+----------------------+--------------+----------------+--------------------------------------------------------------+---------------------------+------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
+| OpenAI         | GPT-5                | 7-Aug-25     | 30-Sep-24      | ~$1.25 input / ~$10 output                                   | 400K (128K max output)    | Frontier LLM - Proprietary unified reasoning model                           | General flagship work - complex coding, large-repo debugging, writing, health Q & A. [developers...openai.com], [requesty.ai], [opeanai.com] |
+| Anthropic      | Claude Opus 5        | 24-Jul-26    | 1-May-26       | $5 input / $25 output                                        | 1M (128K max output)      | Frontier LLM - Proprietary hybrid-reasoning opus model                       | Advanced agentic coding, long-running multi-day projects, spreadsheets/slides, computer use. [anthropic.com], [aipricecompare.org], [platform.claude.com] |
+| Google         | Gemini 3.1 Pro       | 19-Feb-26    | 1-Jan-25       | $2.00/$12.00 (<200K); $4.00/$18.00 (>200K)                   | 1M (64K max output)       | Multimodal LLM - Proprietary multimodel reasoning w/"Deep Think"             | Complex cross-model reasoning, agentic workflows (Antigravity), huge doc/video analysis. [ai.googel.dev], [llm-stats.com] |
+| Meta           | Muse Spark 1.1       | 9-Jul-26     | 2024           | $1.25 / $4.25                                                | 1M                        | Open-weight LLM - Proprietary (Meta's first closed-weight model)             | Agentic workflows, repo-level coding, computer use, multimodel understanding [aireiter.com],[airpricecompare.org] |
+| Mistral AI     | Mistral Medium 3.5   | 29-Apr-26    | 2025           | $1.50 / $7.50                                                | 256K                      | Reasoning LLM - Open-weight (Modified MIT) multimodal model                  | Agentic + coding tasks needing self-hosting or EU data residency. [cloudprice.net], [docs.mistral.ai] |
+| xAI            | Grok 4.5             | 8-Jul-26     | 2025           | $2.00 / $6.00                                                | 500K                      | Frontier LLM - Proprietary chat/coding model, configurable reasoning effort  | coding + general agentic tasks where token efficiency > raw context size. [mungomash.com], [docs.x.ai] |
+| Amazon         | Nova 2 Lite          | 1-Dec-25     | Not disclosed  | $0.30 / $2.50                                                | 1M (66K max output)       | proprietary fast/cost-efficient multimodal                                   | High-colume everyday woekloads - chatbots, docs processing, businessautomation. [pricepertoken.com], [cloudprice.net] |
+| DeepSeek       | DeepSeek-V4-Pro      | 24-Apr-26    | 2025           | $1.74 / $3.48                                                | 1M                        | Open-weight (MIT) MoE flagship                                               | High-end coding, math, long-codebase analysis, self-hosted deployments. [codersera.com], [aitoolsrecap.com] |
+| Alibaba        | Qwen3.8-Max          | 2-Aug-26     | 2025           | $2.00 / $6.00                                                | 1M (131K max output)      | Proprietary at launch (open weights promised),sparse MoE                     | Autonomous multi-day coding, professional-domain tasks, long doc/video analysis [qwencloud.com], [techrepublic.com] |
+| Cohere         | Command A+           | 20-May-26    | 1-Apr-25       | Open-weight (Apache 2.0)-free to self-host, no fixed APIrate | 128K (64K max output)     | Open-weight sparse MoE multimodal agentic model                              | Sovereign/on-prem enterprise agents, 48-language multimodal tasks on minimal hardware [docs.cohere.com], [cohere.com] |
++----------------+----------------------+--------------+----------------+--------------------------------------------------------------+---------------------------+------------------------------------------------------------------------------+------------------------------------------------------------------------------------------------------------------------------+
+
+
+2) Read 2–3 articles about how transformer works?
+Goal to understand:
+(a) Self-attention mechanism
+(b) Vector embedding
+(c) Feed forward Nueral Network
+
+
+Answer:
+Articles referred:
+1. The illustrated Transformer - Jay Alammar - the classic visual deep-dive on self-attention
+2. How Transformers work - DataCamp - full architecture walkthrough (updated Feb 2026)
+3. Feed-Forward Networks in Transformers - Michael Brennodoefer - focused deep-dive on the FFN
+
+1. Vector Embedding:
+---------------------
+--> Turns words into numbers.
+--> Each token becomes a vector (size 512 in the original model) that captures meaning.
+--> Similar words sit close together in "meaning space":
+	king - man + woman = queen
+	
+--> Embedding happens only in the bottom encoder.
+--> Positional Encoding (sine/cosine) is added so the model knows words order - since all words are processed in parallel.
+
+
+2. Self-Attention:
+-------------------
+--> Each word looks at every other word to understand context.
+--> In "... because it was tired", attention links "it" refers "animal".
+--> Q, K, V = Query / Key / Value (like a database lookup):
+	1. Make Q, K, V vectors per word
+	2. Score = Q . K (dot product)
+	3. Scale by squre root of 64 = 8
+	4. Softmax -> weights sum to 1
+	5. Weight & sum Values -> Output
+Multi-Head: do this 8x in parallel; each head learns a different relationship.
+
+
+3. Feed-Forward Network:
+-------------------------
+--> The transformer's "thinking" layer.
+--> Refines each work independently after attention.
+Why needed? Attention alone is linear.
+--> The FFN adds non-linertiy - e.g, "bank" (money) vs "bank" (river).
+
+Standard FFN Formula
+---------------------
+FFN(x)=W2σ(W1x+b1)+b2
+
+Where:
+x = input token embedding (or output from the attention layer)
+W1,W2 = learnable weight matrices
+b1,b2 = bias vectors
+σ = activation function (typically ReLU or GELU)
+
+In modern LLMs (e.g., GPT, Llama, Claude)
+Most models use GELU instead of ReLU:
+-------------------------------------
+FFN(x)=W2GELU(W1x+b1)+b2
+
+Intuition
+--> Expand the input vector to a larger hidden dimension.
+--> Apply a non-linear activation (GELU/ReLU).
+--> Project it back to the original embedding dimension.
+
+For example, if the embedding dimension is 4096, the FFN might expand it to 16384, apply GELU, and then project it back to 4096.
+
+
+How It Fits Together - One Encoder Block
+-----------------------------------------
+Input word
+	|
+Embedding + Positional Encoding
+	|
+Self-attention (words share context)
+	|
+Add & Normalize (residual connection)
+	|
+Feed-Forwad Network (refine each word)
+	|
+Add & normalize
+	|
+Output -> next encoder
+
+
+Key Takeaways
+--------------
+> Attention routes info
+Words communicate with each other
+
+> FFN transforms info
+each word refined on its own
+
+> Parallel, not sequential
+unlike RNNs - faster on GPUs
+
+> Stacked layers (xN)
+6 encoders + 6 decoders originally
+
+> Powers modern LLMs
+GPT, Claude, Gemini, Llama
