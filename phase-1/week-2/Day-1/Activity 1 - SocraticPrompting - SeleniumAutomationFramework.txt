@@ -1,0 +1,744 @@
+Acticity 1 - Socratic Prompting:
+
+Answer:
+Below is the complete design blueprint and production-ready implementation for your scalable, data-driven Selenium framework.
+
+1. Summary of Requirements
++---------------------+-------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------+
+  Requirement Area    | Selected Choice	             | Strategy / Implementation Details
++---------------------+-------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------+  
+  Data Management     | Apache POI (.xlsx)            | Test datasets driven by Excel spreadsheets using an Apache POI utility integrated with TestNG @DataProvider.
+  Driver & Execution  | Local Parallel Execution      | ThreadLocal<WebDriver> thread isolation, TestNG parallel execution (parallel="methods"), and Selenium 4 Manager for automatic driver bin management.
+  Reporting & Logging | ExtentReports + Log4j2        | ExtentReports V5 for execution metrics and failure screenshots, paired with Log4j2 for console and rolling file logs.
+  Config Management   | Multi-Environment .properties | Environment-aware property loading driven by -Denv (e.g., qa, dev) defaulting to qa.
++---------------------+-------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------+ 
+
+2. Architecture & Design Decisions
+						   +------------------------+
+                           |  TestNG Suite Runner   |
+                           |  (parallel = methods)  |
+                           +-----------+------------+
+                                       |
+                   +-------------------+-------------------+
+                   |                                       |
+        +----------v----------+                 +----------v----------+
+        |   Thread-1 (Test)   |                 |   Thread-2 (Test)   |
+        +----------+----------+                 +----------+----------+
+                   |                                       |
+      +------------v------------+             +------------v------------+
+      | ThreadLocal<WebDriver>  |             | ThreadLocal<WebDriver>  |
+      +------------+------------+             +------------+------------+
+                   |                                       |
+    +--------------+--------------+         +--------------+--------------+
+    | Page Objects (BasePage)    |         | Page Objects (BasePage)    |
+    +--------------+--------------+         +--------------+--------------+
+                   |                                       |
+    +--------------v--------------+         +--------------v--------------+
+    | Test Listener & Reporting   |         | Test Listener & Reporting   |
+    | (ExtentReports + Log4j2)    |         | (ExtentReports + Log4j2)    |
+    +-----------------------------+         +-----------------------------+
+	
+* Thread-Safety & Isolation (ThreadLocal): Prevents cross-thread interference during parallel execution by giving each test thread its own isolated instance of WebDriver and ExtentTest.
+* Page Object Model with Base Abstraction: All page classes extend a BasePage that encapsulates explicit waits (WebDriverWait), reducing boilerplate and flakiness.
+* Decoupled Data Engine: Test logic remains clean while an ExcelUtil converts Excel tables into 2D arrays (Object[][]) consumed directly by TestNG @DataProvider.
+* Listener-Driven Lifecycle Management: ExtentReports and Log4j2 hooks are managed through TestNG's ITestListener, keeping test classes free of reporting boilerplate.
+
+3. Recommended Project Structure
+selenium-automation-framework/
+├── pom.xml
+├── src/
+│   ├── main/
+│   │   └── java/
+│   │       └── com/
+│   │           └── framework/
+│   │               ├── config/
+│   │               │   └── ConfigReader.java
+│   │               ├── driver/
+│   │               │   ├── DriverFactory.java
+│   │               │   └── DriverManager.java
+│   │               ├── utils/
+│   │               │   ├── ExcelUtil.java
+│   │               │   ├── ScreenshotUtil.java
+│   │               │   └── Log.java
+│   │               ├── reports/
+│   │               │   ├── ExtentManager.java
+│   │               │   └── ExtentTestManager.java
+│   │               └── pages/
+│   │                   ├── BasePage.java
+│   │                   └── LoginPage.java
+│   └── test/
+│       ├── java/
+│       │   └── com/
+│       │       └── framework/
+│       │           ├── listeners/
+│       │           │   └── TestListener.java
+│       │           └── tests/
+│       │               ├── BaseTest.java
+│       │               └── LoginTest.java
+│       └── resources/
+│           ├── config/
+│           │   ├── dev.properties
+│           │   └── qa.properties
+│           ├── testdata/
+│           │   └── TestData.xlsx
+│           ├── log4j2.xml
+│           └── testng.xml
+
+4. Complete Implementation
+4.1. pom.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+                             http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.framework</groupId>
+    <artifactId>selenium-automation-framework</artifactId>
+    <version>1.0-SNAPSHOT</version>
+
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <selenium.version>4.23.0</selenium.version>
+        <testng.version>7.10.2</testng.version>
+        <poi.version>5.3.0</poi.version>
+        <extent.version>5.1.2</extent.version>
+        <log4j.version>2.23.1</log4j.version>
+    </properties>
+
+    <dependencies>
+        <!-- Selenium Java -->
+        <dependency>
+            <groupId>org.seleniumhq.selenium</groupId>
+            <artifactId>selenium-java</artifactId>
+            <version>${selenium.version}</version>
+        </dependency>
+
+        <!-- TestNG -->
+        <dependency>
+            <groupId>org.testng</groupId>
+            <artifactId>testng</artifactId>
+            <version>${testng.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Apache POI for Excel Parsing -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>${poi.version}</version>
+        </dependency>
+
+        <!-- ExtentReports -->
+        <dependency>
+            <groupId>com.aventstack</groupId>
+            <artifactId>extent-reports</artifactId>
+            <version>${extent.version}</version>
+        </dependency>
+
+        <!-- Log4j2 -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+            <version>${log4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <version>${log4j.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.3.1</version>
+                <configuration>
+                    <suiteXmlFiles>
+                        <suiteXmlFile>src/test/resources/testng.xml</suiteXmlFile>
+                    </suiteXmlFiles>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+
+4.2. Configuration Management
+src/test/resources/config/qa.properties
+browser=chrome
+baseUrl=https://opensource-demo.orangehrmlive.com
+implicitWait=10
+explicitWait=15
+headless=false
+
+src/test/resources/config/dev.properties
+browser=firefox
+baseUrl=https://dev-demo.orangehrmlive.com
+implicitWait=5
+explicitWait=10
+headless=false
+
+src/main/java/com/framework/config/ConfigReader.java
+package com.framework.config;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.util.Properties;
+
+/**
+ * Singleton Configuration Reader dynamically loading target environment property files.
+ */
+public class ConfigReader {
+    private static Properties properties;
+
+    static {
+        // Default to 'qa' environment if -Denv is not supplied
+        String env = System.getProperty("env", "qa").toLowerCase();
+        String configPath = "src/test/resources/config/" + env + ".properties";
+
+        try (FileInputStream fis = new FileInputStream(configPath)) {
+            properties = new Properties();
+            properties.load(fis);
+        } catch (IOException e) {
+            throw new RuntimeException("Could not load configuration file at: " + configPath, e);
+        }
+    }
+
+    public static String getProperty(String key) {
+        String value = properties.getProperty(key);
+        if (value == null) {
+            throw new RuntimeException("Property key '" + key + "' not found in configuration.");
+        }
+        return value;
+    }
+
+    public static int getIntProperty(String key) {
+        return Integer.parseInt(getProperty(key));
+    }
+
+    public static boolean getBooleanProperty(String key) {
+        return Boolean.parseBoolean(getProperty(key));
+    }
+}
+
+4.3. Logging Configuration
+src/test/resources/log4j2.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN">
+    <Appenders>
+        <Console name="ConsoleAppender" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+        </Console>
+        <RollingFile name="FileAppender" fileName="logs/automation.log"
+                     filePattern="logs/automation-%d{yyyy-MM-dd}-%i.log">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n"/>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="10MB"/>
+            </Policies>
+        </RollingFile>
+    </Appenders>
+    <Loggers>
+        <Root level="info">
+            <AppenderRef ref="ConsoleAppender"/>
+            <AppenderRef ref="FileAppender"/>
+        </Root>
+    </Loggers>
+</Configuration>
+
+src/main/java/com/framework/utils/Log.java
+package com.framework.utils;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+public class Log {
+    private static final Logger logger = LogManager.getLogger(Log.class);
+
+    public static void info(String message) {
+        logger.info(message);
+    }
+
+    public static void warn(String message) {
+        logger.warn(message);
+    }
+
+    public static void error(String message) {
+        logger.error(message);
+    }
+
+    public static void debug(String message) {
+        logger.debug(message);
+    }
+}
+
+4.4. Driver Management (ThreadLocal)
+src/main/java/com/framework/driver/DriverManager.java
+package com.framework.driver;
+
+import org.openqa.selenium.WebDriver;
+
+/**
+ * Thread-safe wrapper around ThreadLocal<WebDriver>.
+ */
+public class DriverManager {
+    private static final ThreadLocal<WebDriver> driverThreadLocal = new ThreadLocal<>();
+
+    public static WebDriver getDriver() {
+        return driverThreadLocal.get();
+    }
+
+    public static void setDriver(WebDriver driver) {
+        driverThreadLocal.set(driver);
+    }
+
+    public static void unload() {
+        driverThreadLocal.remove();
+    }
+}
+
+src/main/java/com/framework/driver/DriverFactory.java
+package com.framework.driver;
+
+import com.framework.config.ConfigReader;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.chrome.ChromeDriver;
+import org.openqa.selenium.chrome.ChromeOptions;
+import org.openqa.selenium.edge.EdgeDriver;
+import org.openqa.selenium.edge.EdgeOptions;
+import org.openqa.selenium.firefox.FirefoxDriver;
+import org.openqa.selenium.firefox.FirefoxOptions;
+
+import java.time.Duration;
+
+public class DriverFactory {
+
+    public static WebDriver createDriver() {
+        WebDriver driver;
+        String browser = ConfigReader.getProperty("browser").toLowerCase();
+        boolean isHeadless = ConfigReader.getBooleanProperty("headless");
+
+        switch (browser) {
+            case "chrome":
+                ChromeOptions chromeOptions = new ChromeOptions();
+                if (isHeadless) chromeOptions.addArguments("--headless=new");
+                chromeOptions.addArguments("--start-maximized");
+                driver = new ChromeDriver(chromeOptions);
+                break;
+
+            case "firefox":
+                FirefoxOptions firefoxOptions = new FirefoxOptions();
+                if (isHeadless) firefoxOptions.addArguments("-headless");
+                driver = new FirefoxDriver(firefoxOptions);
+                driver.manage().window().maximize();
+                break;
+
+            case "edge":
+                EdgeOptions edgeOptions = new EdgeOptions();
+                if (isHeadless) edgeOptions.addArguments("--headless=new");
+                driver = new EdgeDriver(edgeOptions);
+                driver.manage().window().maximize();
+                break;
+
+            default:
+                throw new IllegalArgumentException("Unsupported browser: " + browser);
+        }
+
+        int implicitWait = ConfigReader.getIntProperty("implicitWait");
+        driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(implicitWait));
+
+        return driver;
+    }
+}
+
+4.5. Reporting & Utilities
+src/main/java/com/framework/reports/ExtentManager.java
+package com.framework.reports;
+
+import com.aventstack.extentreports.ExtentReports;
+import com.aventstack.extentreports.reporter.ExtentSparkReporter;
+import com.aventstack.extentreports.reporter.configuration.Theme;
+
+public class ExtentManager {
+    private static ExtentReports extent;
+
+    public static synchronized ExtentReports getInstance() {
+        if (extent == null) {
+            ExtentSparkReporter spark = new ExtentSparkReporter("build/reports/ExtentReport.html");
+            spark.config().setReportName("Automation Test Results");
+            spark.config().setDocumentTitle("Execution Report");
+            spark.config().setTheme(Theme.STANDARD);
+
+            extent = new ExtentReports();
+            extent.attachReporter(spark);
+            extent.setSystemInfo("Framework", "Selenium Java Data-Driven");
+            extent.setSystemInfo("OS", System.getProperty("os.name"));
+        }
+        return extent;
+    }
+}
+
+src/main/java/com/framework/reports/ExtentTestManager.java
+package com.framework.reports;
+
+import com.aventstack.extentreports.ExtentTest;
+
+/**
+ * Thread-safe ExtentTest container.
+ */
+public class ExtentTestManager {
+    private static final ThreadLocal<ExtentTest> extentTestMap = new ThreadLocal<>();
+
+    public static ExtentTest getTest() {
+        return extentTestMap.get();
+    }
+
+    public static void setTest(ExtentTest test) {
+        extentTestMap.set(test);
+    }
+
+    public static void unload() {
+        extentTestMap.remove();
+    }
+}
+
+src/main/java/com/framework/utils/ScreenshotUtil.java
+package com.framework.utils;
+
+import com.framework.driver.DriverManager;
+import org.openqa.selenium.OutputType;
+import org.openqa.selenium.TakesScreenshot;
+
+public class ScreenshotUtil {
+    
+    /**
+     * Captures screenshot as Base64 for clean ExtentReport inline embedding.
+     */
+    public static String getBase64Screenshot() {
+        return ((TakesScreenshot) DriverManager.getDriver()).getScreenshotAs(OutputType.BASE64);
+    }
+}
+
+src/main/java/com/framework/utils/ExcelUtil.java
+package com.framework.utils;
+
+import org.apache.poi.ss.usermodel.*;
+import java.io.FileInputStream;
+import java.io.IOException;
+
+public class ExcelUtil {
+
+    /**
+     * Parses an Excel sheet and converts row data into a 2D Object array for TestNG DataProvider.
+     */
+    public static Object[][] getTestData(String filePath, String sheetName) {
+        Object[][] data = null;
+
+        try (FileInputStream fis = new FileInputStream(filePath);
+             Workbook workbook = WorkbookFactory.create(fis)) {
+
+            Sheet sheet = workbook.getSheet(sheetName);
+            if (sheet == null) {
+                throw new RuntimeException("Sheet '" + sheetName + "' not found in " + filePath);
+            }
+
+            int rowCount = sheet.getLastRowNum();
+            int colCount = sheet.getRow(0).getLastCellNum();
+
+            data = new Object[rowCount][colCount];
+
+            DataFormatter formatter = new DataFormatter();
+
+            for (int i = 0; i < rowCount; i++) {
+                Row row = sheet.getRow(i + 1); // Skip header row
+                for (int j = 0; j < colCount; j++) {
+                    if (row == null) {
+                        data[i][j] = "";
+                    } else {
+                        Cell cell = row.getCell(j);
+                        data[i][j] = formatter.formatCellValue(cell);
+                    }
+                }
+            }
+
+        } catch (IOException e) {
+            Log.error("Failed to read Excel data from path: " + filePath);
+            throw new RuntimeException("Excel Read Exception: ", e);
+        }
+
+        return data;
+    }
+}
+
+4.6. Page Objects (BasePage & Sample Page)
+src/main/java/com/framework/pages/BasePage.java
+package com.framework.pages;
+
+import com.framework.config.ConfigReader;
+import com.framework.driver.DriverManager;
+import com.framework.utils.Log;
+import org.openqa.selenium.By;
+import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
+
+import java.time.Duration;
+
+public abstract class BasePage {
+    protected WebDriverWait wait;
+
+    public BasePage() {
+        int explicitWait = ConfigReader.getIntProperty("explicitWait");
+        this.wait = new WebDriverWait(DriverManager.getDriver(), Duration.ofSeconds(explicitWait));
+    }
+
+    protected void click(By locator, String elementName) {
+        WebElement element = wait.until(ExpectedConditions.elementToBeClickable(locator));
+        element.click();
+        Log.info("Clicked on element: " + elementName);
+    }
+
+    protected void sendKeys(By locator, String value, String elementName) {
+        WebElement element = wait.until(ExpectedConditions.visibilityOfElementLocated(locator));
+        element.clear();
+        element.sendKeys(value);
+        Log.info("Typed '" + value + "' into: " + elementName);
+    }
+
+    protected String getText(By locator, String elementName) {
+        WebElement element = wait.until(ExpectedConditions.visibilityOfElementLocated(locator));
+        String text = element.getText();
+        Log.info("Retrieved text from " + elementName + ": " + text);
+        return text;
+    }
+
+    protected boolean isDisplayed(By locator, String elementName) {
+        try {
+            boolean displayed = wait.until(ExpectedConditions.visibilityOfElementLocated(locator)).isDisplayed();
+            Log.info("Visibility check for " + elementName + ": " + displayed);
+            return displayed;
+        } catch (Exception e) {
+            Log.warn("Element not visible: " + elementName);
+            return false;
+        }
+    }
+}
+
+src/main/java/com/framework/pages/LoginPage.java
+package com.framework.pages;
+
+import org.openqa.selenium.By;
+
+public class LoginPage extends BasePage {
+
+    // Locators using By strategy for better thread safety and dynamic waits
+    private final By txtUsername = By.name("username");
+    private final By txtPassword = By.name("password");
+    private final By btnLogin = By.xpath("//button[@type='submit']");
+    private final By txtDashboardHeader = By.xpath("//h6[text()='Dashboard']");
+    private final By txtErrorMessage = By.xpath("//p[contains(@class, 'alert-content-text')]");
+
+    public LoginPage enterUsername(String username) {
+        sendKeys(txtUsername, username, "Username Field");
+        return this;
+    }
+
+    public LoginPage enterPassword(String password) {
+        sendKeys(txtPassword, password, "Password Field");
+        return this;
+    }
+
+    public LoginPage clickLogin() {
+        click(btnLogin, "Login Button");
+        return this;
+    }
+
+    public boolean isDashboardDisplayed() {
+        return isDisplayed(txtDashboardHeader, "Dashboard Header");
+    }
+
+    public String getErrorMessage() {
+        return getText(txtErrorMessage, "Error Message");
+    }
+}
+
+4.7. Test Framework & Listeners
+src/test/java/com/framework/listeners/TestListener.java
+package com.framework.listeners;
+
+import com.aventstack.extentreports.ExtentTest;
+import com.aventstack.extentreports.MediaEntityBuilder;
+import com.aventstack.extentreports.Status;
+import com.framework.reports.ExtentManager;
+import com.framework.reports.ExtentTestManager;
+import com.framework.utils.Log;
+import com.framework.utils.ScreenshotUtil;
+import org.testng.ITestContext;
+import org.testng.ITestListener;
+import org.testng.ITestResult;
+
+public class TestListener implements ITestListener {
+
+    @Override
+    public void onStart(ITestContext context) {
+        Log.info("=== Starting Test Suite Execution: " + context.getName() + " ===");
+    }
+
+    @Override
+    public void onFinish(ITestContext context) {
+        Log.info("=== Finished Test Suite Execution: " + context.getName() + " ===");
+        ExtentManager.getInstance().flush();
+    }
+
+    @Override
+    public void onTestStart(ITestResult result) {
+        Log.info("Starting Test: " + result.getMethod().getMethodName());
+        ExtentTest test = ExtentManager.getInstance().createTest(result.getMethod().getMethodName());
+        ExtentTestManager.setTest(test);
+    }
+
+    @Override
+    public void onTestSuccess(ITestResult result) {
+        Log.info("Test PASSED: " + result.getMethod().getMethodName());
+        ExtentTestManager.getTest().log(Status.PASS, "Test Executed Successfully");
+        ExtentTestManager.unload();
+    }
+
+    @Override
+    public void onTestFailure(ITestResult result) {
+        Log.error("Test FAILED: " + result.getMethod().getMethodName());
+        Log.error(result.getThrowable().getMessage());
+
+        String base64Screenshot = ScreenshotUtil.getBase64Screenshot();
+
+        ExtentTestManager.getTest().log(
+            Status.FAIL,
+            result.getThrowable(),
+            MediaEntityBuilder.createScreenCaptureFromBase64String(base64Screenshot).build()
+        );
+        ExtentTestManager.unload();
+    }
+
+    @Override
+    public void onTestSkipped(ITestResult result) {
+        Log.warn("Test SKIPPED: " + result.getMethod().getMethodName());
+        ExtentTestManager.getTest().log(Status.SKIP, "Test Skipped: " + result.getThrowable());
+        ExtentTestManager.unload();
+    }
+}
+
+src/test/java/com/framework/tests/BaseTest.java
+package com.framework.tests;
+
+import com.framework.config.ConfigReader;
+import com.framework.driver.DriverFactory;
+import com.framework.driver.DriverManager;
+import com.framework.utils.Log;
+import org.openqa.selenium.WebDriver;
+import org.testng.annotations.AfterMethod;
+import org.testng.annotations.BeforeMethod;
+
+public abstract class BaseTest {
+
+    @BeforeMethod
+    public void setUp() {
+        WebDriver driver = DriverFactory.createDriver();
+        DriverManager.setDriver(driver);
+        Log.info("Driver initialized on Thread ID: " + Thread.currentThread().getId());
+
+        String baseUrl = ConfigReader.getProperty("baseUrl");
+        DriverManager.getDriver().get(baseUrl);
+        Log.info("Navigated to: " + baseUrl);
+    }
+
+    @AfterMethod
+    public void tearDown() {
+        if (DriverManager.getDriver() != null) {
+            DriverManager.getDriver().quit();
+            Log.info("Driver closed on Thread ID: " + Thread.currentThread().getId());
+            DriverManager.unload();
+        }
+    }
+}
+
+src/test/java/com/framework/tests/LoginTest.java
+package com.framework.tests;
+
+import com.framework.pages.LoginPage;
+import com.framework.utils.ExcelUtil;
+import org.testng.Assert;
+import org.testng.annotations.DataProvider;
+import org.testng.annotations.Test;
+
+public class LoginTest extends BaseTest {
+
+    @DataProvider(name = "excelData", parallel = false)
+    public Object[][] getLoginData() {
+        String excelPath = "src/test/resources/testdata/TestData.xlsx";
+        return ExcelUtil.getTestData(excelPath, "LoginData");
+    }
+
+    @Test(dataProvider = "excelData")
+    public void testDataDrivenLogin(String username, String password, String expectedResult) {
+        LoginPage loginPage = new LoginPage();
+
+        loginPage.enterUsername(username)
+                 .enterPassword(password)
+                 .clickLogin();
+
+        if (expectedResult.equalsIgnoreCase("Success")) {
+            Assert.assertTrue(loginPage.isDashboardDisplayed(), "Dashboard was expected but not displayed.");
+        } else {
+            Assert.assertTrue(loginPage.getErrorMessage().contains("Invalid"), "Expected error message not displayed.");
+        }
+    }
+}
+
+4.8. Suite Execution Runner
+src/test/resources/testng.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="Data Driven Automation Suite" parallel="methods" thread-count="3">
+    <listeners>
+        <listener class-name="com.framework.listeners.TestListener"/>
+    </listeners>
+
+    <test name="Login Tests">
+        <classes>
+            <class name="com.framework.tests.LoginTest"/>
+        </classes>
+    </test>
+</suite>
+
+5. Design Choice Analysis & Alternatives
+1. ThreadLocal<WebDriver> vs. Static Driver Instances
+Why this choice: Using a single public static WebDriver driver causes race conditions in multi-threaded executions. ThreadLocal wraps every driver instance into a dedicated memory bucket mapped to the executing thread, enabling safe parallel execution.
+Alternative: Dependency Injection (e.g., Guice or Spring Test) passing WebDriver around via constructors. While clean, it adds dependency weight; ThreadLocal achieves isolation natively with minimal overhead.
+
+2. Standard By Locators vs. @FindBy PageFactory
+Why this choice: PageFactory initialized via PageFactory.initElements() caches elements or relies on implicit waits, which can lead to StaleElementReferenceException when combined with modern dynamic SPA (Single Page Application) frameworks. Using explicit waits on raw By locators ensures fresh DOM queries every time an interaction occurs.
+Alternative: Fluent Page Object Model with @FindBy. Operates well for simple apps, but struggles under fast-changing DOM states compared to explicit WebDriverWait.
+
+3. Base64 Screenshots vs. Local PNG File Storage
+Why this choice: Saving screenshots as Base64 strings enables ExtentReports to embed images directly into a single self-contained .html report file. This simplifies report sharing across CI/CD pipelines and team channels without dealing with broken image links.
+Alternative: Saving .png files to disk and embedding relative file paths. While this saves memory on massive runs, it breaks if the HTML file is emailed or moved without its image folder.
+
+6. How to Run the Framework
+1. Place your Excel sheet at src/test/resources/testdata/TestData.xlsx with a sheet named LoginData structured like:
+Username	Password	ExpectedResult
+Admin	admin123	Success
+InvalidUser	wrongPass	Fail
+
+2. Execute default (QA) suite via Maven:
+Bash
+mvn clean test
+
+3. Execute against Dev environment with system property override:
+Bash
+mvn clean test -Denv=dev
+
+4. View Execution Reports:
+Open build/reports/ExtentReport.html in your browser.

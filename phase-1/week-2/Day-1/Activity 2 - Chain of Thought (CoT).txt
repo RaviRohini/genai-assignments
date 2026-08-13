@@ -1,0 +1,76 @@
+Activity 2 - Chain of Thought (CoT)
+
+Here is the systematic Chain of Thought (CoT) reasoning process used to investigate and uncover the root causes behind the generic error: "Transaction could not be completed.
+"Chain of Thought (CoT) Investigation
+
+Step 1: Define the Transaction Lifecycle
+To diagnose why a ₹50,000 transfer failed, we must trace the request path:
+Customer/App > Auth/Security > Network/Switch > Core Banking System > Beneficiary Account
+Every layer in this workflow introduces potential points of failure.
+
+Step 2: Examine Account & Balance Constraints (Remitter Side)
+Thought: Before sending the request out to the bank servers, the system evaluates the sender's account state and transfer capability for ₹50,000.
+Question: Does the user have the money, and are they allowed to send this amount today?
+	Scenario A: The account balance is less than ₹50,000 (e.g., balance is ₹35,000).
+		💡 Discovery Uncovered: Insufficient balance
+	
+	Scenario B: The user has enough money, but they have already transferred their maximum permitted daily threshold (e.g., daily limit is ₹1,000,000, but ₹960,000 was spent earlier).
+		💡 Discovery Uncovered: Daily limit exceeded
+		
+Step 3: Examine Authentication & Authorization Layer
+Thought: High-value transactions (₹50,000) require Two-Factor Authentication (2FA) via OTP or T-PIN.
+Question: Was authorization completed successfully within the required timeframe?
+	Observation: If the user took too long to enter the One-Time Password sent to their mobile, or entered a delayed payload, the validation token becomes invalid.
+		💡 Discovery Uncovered: OTP expired
+	
+Step 4: Examine Fraud & Security Engines
+Thought: Banking platforms pass high-value transfers through automated risk engines before processing.
+Question: Did the ₹50,000 transfer trigger security anomalies?
+	Observation: Factors like a new device login, unusual location/IP, rapid sequential transfers, or a newly added beneficiary within the 24-hour cooling window can flag the transaction as high risk.
+		💡 Discovery Uncovered: Fraud rule triggered
+
+Step 5: Examine Network & Transport Mechanics
+Thought: The app issues an API request across the public cellular/Wi-Fi network to the bank's gateway.
+Question: Did the request payload reach the destination and receive a response in time?
+	Observation: Poor network signal or high latency causes the connection to drop mid-flight or time out before the client gets a HTTP 200/ACK response.
+		💡 Discovery Uncovered: Network timeout
+	
+Step 6: Examine Payment Middleware & Switch Infrastructure
+Thought: In India (indicated by ₹ symbol), ₹50,000 transfers typically route through payment switches like UPI, IMPS, or NEFT.
+Question: Is the central routing switch operational?
+	Observation: If the NPCI UPI switch or the underlying bank payment gateway switch experiences heavy traffic or service failure, routing fails instantly.
+		💡 Discovery Uncovered: UPI switch unavailable
+
+Step 7: Examine Bank Server & Core Banking Infrastructure (CBS)
+Thought: Assuming the switch routed the request, the bank’s internal servers must process the double-entry accounting ledger.
+Question: Are the bank's API servers and backend databases online?
+	Scenario A: The bank’s external API application servers are offline or unresponsive.
+		💡 Discovery Uncovered: Bank server unavailable
+	Scenario B: The centralized Core Banking System (CBS) database handling ledger updates is undergoing scheduled maintenance or experiencing a database crash.
+		💡 Discovery Uncovered: Core banking unavailable
+		
+Step 8: Examine Beneficiary (Receiving Account) State
+Thought: The remitter's side and payment pipe cleared successfully, but the money needs to land in the target account.
+Question: Can the destination account accept ₹50,000?
+	Observation: If the target account is dormant, frozen by regulatory orders, blocked due to uncompleted KYC, or closed, the transaction gets rejected by the receiving node.
+	💡 Discovery Uncovered: Beneficiary inactive
+	
+Summary of Discoveries
++-------+------------------------+-------------------------------+
+| Phase | Technical Layer        | Root Cause Discovered         |
++-------+------------------------+-------------------------------+
+|   1   | Sender Account         | 1. Daily limit exceeded       |
+|       |                        | 2. Insufficient balance       |
++-------+------------------------+-------------------------------+
+|   2   | Auth & Security        | 3. OTP expired                |
+|       |                        | 4. Fraud rule triggered       |
++-------+------------------------+-------------------------------+
+|   3   | Transport & Network    | 5. Network timeout            |
++-------+------------------------+-------------------------------+
+|   4   | Middleware / Routing   | 6. UPI switch unavailable     |
++-------+------------------------+-------------------------------+
+|   5   | Bank Backend           | 7. Bank server unavailable    |
+|       |                        | 8. Core banking unavailable   |
++-------+------------------------+-------------------------------+
+|   6   | Receiver Side          | 9. Beneficiary inactive       |
++-------+------------------------+-------------------------------+
