@@ -1,0 +1,33 @@
+Concise summary of implemented changes
+Implemented the following changes across the app:
+
+* Added a Reset button in the top-right toolbar
+* Added a Download XLSX button in the top-right toolbar
+* Added a mandatory Summary field in the form
+* Kept the two-column layout and made it denser and more balanced
+* Kept the Jira panel above the form
+* Added a Jira connection flow with:
+	Jira Base URL
+	Email ID
+	API Token
+* Added a Connect Jira button in the toolbar
+* Added a Disconnect Jira action inside the connected Jira panel
+* Connected the app to Jira through the backend proxy to avoid browser CORS issues
+* Fetched Jira stories from the backend and displayed them in a dropdown
+* Sorted Jira stories in ascending Scrum order like:
+	SCRUM-1
+	SCRUM-2
+	SCRUM-3
+* Auto-filled the story form from the selected Jira story
+* Removed the extra story detail cards and kept the dropdown-based story selection
+* Updated the Test Repository Path dynamically from the selected Jira story key
+	example: WSO/Current Releases/Release 1/Iteration 1/SCRUM-5
+* Added Additional Info as a field below Acceptance Criteria
+* Kept it optional, not auto-filled from Jira
+* Updated the form validation to require the key fields only
+* Kept the UI compact and more polished for a dashboard-style layout
+
+Key behavior:
+* If Jira is connected, stories appear in the dropdown
+* When a story is selected, the form fields populate
+* The repository path updates based on the selected story’s Scrum key
