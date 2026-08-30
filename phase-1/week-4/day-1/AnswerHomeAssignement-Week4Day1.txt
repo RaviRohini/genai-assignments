@@ -1,0 +1,5 @@
+I have added the *Testing Type* field next to the *Category* field. Additionally, I have implemented the following features to facilitate easier filtering and record counting:
+
+1. Added a *Testing Type* dropdown with the following options: *Smoke, Sanity, Regression, and Functional*.
+2. Added a *record count* that dynamically updates based on the applied filters.
+Could you please review and share if any comments.
