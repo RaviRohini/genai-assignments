@@ -1,0 +1,483 @@
+Assignment 2 – Explore & Build an n8n Template
+----------------------------------------------
+1. Selected Template
+
+Template Name: Chat with a Database using AI
+Category: Internal Wiki / AI RAG
+Created by: David Roberts
+
+Why I selected this template
+I selected this workflow because it combines AI, databases, and automation in one practical use case.
+Normally, if a person wants information from a database, they need to understand SQL. For example, they might need to write:
+SELECT * FROM employees;
+With this workflow, the user can instead ask a question in normal English, such as:
+"What are the names of the employees?"
+The AI agent understands the question, determines what database query is needed, executes the query, and returns the result. n8n's own explanation describes this as an intelligent data analyst approach where the agent uses SQL to query the database instead of sending all database data to the language model.
+
+2. What Problem Does the Workflow Solve?
+
+The workflow solves the problem of making database information accessible to people who do not know SQL.
+Traditional approach
+User
+  ↓
+Write SQL query
+  ↓
+Database
+  ↓
+Get results
+  ↓
+Understand results
+
+This requires technical knowledge.
+
+AI-powered approach
+User asks question in English
+          ↓
+      AI Agent
+          ↓
+   Generates SQL/query
+          ↓
+       Database
+          ↓
+      Query result
+          ↓
+      AI interprets
+          ↓
+    Natural-language answer
+
+This makes the database much easier to interact with.
+
+3. Understanding the Complete Workflow
+
+The template can be understood as two main sections:
+Section A – Prepare the database
+This section downloads and prepares an example SQLite database.
+
+Section B – Chat with the database
+This section receives the user's question and uses an AI agent to query the database.
+The official n8n tutorial explains the same architecture: download the example Chinook database, extract it, save it locally, then use a Chat Trigger and SQL Agent to answer questions about the database.
+
+4. Section A – Preparing the Database
+
+The first part contains three important nodes.
+Node 1 – Manual Trigger
+Purpose: Start the database setup manually.
+The workflow does not need to download the database every time somebody asks a question. Therefore, this section is intended to be run once when setting up the workflow.
+The Manual Trigger starts the preparation process.
+
+Manual Trigger
+      ↓
+HTTP Request
+Why is it needed?
+It gives the user control over when the database setup begins.
+
+Node 2 – HTTP Request
+Purpose: Download the example database.
+The HTTP Request node downloads the Chinook example database as a ZIP archive.
+The Chinook database is useful for demonstration because it contains example business-style data such as customers, employees, invoices, tracks, artists, and genres.
+
+The flow becomes:
+
+Manual Trigger
+      ↓
+HTTP Request
+      ↓
+ZIP database file
+Why is this node needed?
+The AI agent needs actual data to work with. The HTTP Request node provides the example database.
+Node 3 – Compression
+Purpose: Extract the downloaded ZIP file.
+
+The HTTP Request gives us a compressed file. The Compression node decompresses it.
+
+Manual Trigger
+      ↓
+HTTP Request
+      ↓
+Compression
+      ↓
+SQLite database
+Why is this node needed?
+
+The AI agent cannot directly use the ZIP archive as the SQLite database. The archive must first be extracted.
+
+Node 4 – Read/Write Files from Disk
+Purpose: Save the extracted .db file locally.
+The extracted database is written to the local filesystem. n8n's tutorial specifically describes this node as saving the .db file locally.
+
+So the complete preparation section is:
+
+Manual Trigger
+      ↓
+HTTP Request
+      ↓
+Compression
+      ↓
+Read/Write Files from Disk
+      ↓
+chinook.db
+
+This setup section normally only needs to be executed once.
+
+5. Section B – Chat With the Database
+
+Now we have the database. The second part allows a person to ask questions about it.
+
+The main flow is:
+
+Chat Trigger
+      ↓
+Read Database File
+      ↓
+Set/Edit Data
+      ↓
+AI Agent
+      ↓
+Answer
+There are also connections from the AI Agent to the AI model and memory.
+
+6. Node 5 – Chat Trigger
+
+Purpose: Receive the user's question.
+This is the starting point for the actual chatbot.
+For example, the user could ask:
+"What are the names of the employees?"
+or:
+"What are the revenues by genre?"
+The n8n tutorial uses these kinds of questions to demonstrate the SQL agent.
+Why is this node needed?
+Without the Chat Trigger, there would be no way for a user to communicate with the AI agent.
+The workflow starts:
+
+User
+ ↓
+Chat Trigger
+
+7. Node 6 – Load the SQLite Database
+
+After receiving the user's question, the workflow loads the local chinook.db file.
+The database is required because the AI needs to query actual data rather than simply guess an answer.
+Chat Trigger
+      ↓
+Load chinook.db
+
+8. Node 7 – Set/Edit Node
+
+The Set node is used to combine the chat input with the database binary file.
+According to n8n's walkthrough, the JSON data can reference the Chat Trigger using:
+{{ $('Chat Trigger').item.json }}
+and the binary file should also be included.
+Why is this important?
+The next AI Agent needs two things:
+The user's question
+Access to the database
+The Set node helps bring these pieces of information together.
+Conceptually:
+User question ───────┐
+                     ↓
+                 Set Node
+                     ↑
+Database file ───────┘
+
+9. Node 8 – AI Agent / LangChain SQL Agent
+
+This is the most important node in the workflow.
+The template uses an AI/LangChain agent configured as a SQL Agent with SQLite as its database source.
+Its job is to reason about the user's question and determine what database operation is required.
+For example:
+User asks:
+"What are the names of the employees?"
+The agent can determine that it needs employee information and generate an appropriate SQL query.
+
+Conceptually:
+"What are the names of the employees?"
+                 ↓
+             AI Agent
+                 ↓
+          SQL query
+                 ↓
+            SQLite DB
+                 ↓
+             Results
+                 ↓
+          AI Agent
+                 ↓
+      Natural-language answer
+Why use an AI Agent?
+
+A normal SQL node would require us to manually write the SQL query.
+The AI Agent makes the workflow flexible because users can ask different questions without creating a separate SQL query for every question.
+
+10. Node 9 – OpenAI Chat Model
+
+The AI Agent needs a language model to understand the user's question and decide what actions to take.
+The template uses an OpenAI Chat Model, although n8n notes that another model/service could be substituted.
+The model acts as the AI reasoning component:
+
+User question
+      ↓
+OpenAI Chat Model
+      ↓
+Understand question
+      ↓
+Determine SQL operation
+Why is it needed?
+
+The database itself doesn't understand natural language.
+For example:
+"Which genre generated the most revenue?"
+is understandable to a human, but the database needs a structured query.
+The language model helps bridge that gap.
+
+11. Node 10 – Memory
+
+The workflow also uses a memory component to keep previous responses/conversation context.
+The n8n walkthrough explains that a window buffer memory can store past responses so the agent can maintain conversational context.
+For example:
+User:
+What are the employees?
+AI:
+There are several employees in the database.
+Then the user could ask:
+Which one is the manager?
+Memory helps the AI understand that the second question relates to the previous conversation.
+
+12. Complete Workflow Diagram
+
+The complete workflow can be represented like this:
+
+                DATABASE SETUP
+                ==============
+
+             Manual Trigger
+                    │
+                    ▼
+             HTTP Request
+                    │
+                    ▼
+              Compression
+                    │
+                    ▼
+        Read/Write Files from Disk
+                    │
+                    ▼
+               chinook.db
+
+
+                  CHAT SECTION
+                  =============
+
+               Chat Trigger
+                    │
+                    ▼
+             Load Database
+                    │
+                    ▼
+                Set Node
+                    │
+                    ▼
+              AI Agent
+             /         \
+            /           \
+           ▼             ▼
+    OpenAI Chat       Memory
+       Model
+           │
+           ▼
+       SQL Agent
+           │
+           ▼
+       SQLite DB
+           │
+           ▼
+       Query Result
+           │
+           ▼
+      AI-generated
+         answer
+           │
+           ▼
+          User
+13. Integrations Used
+
+The important technologies in this workflow are:
+
+Component	Purpose
+n8n	Workflow automation platform
+Chat Trigger	Receives the user's question
+SQLite	Stores the example database
+HTTP Request	Downloads the database
+Compression	Extracts the ZIP archive
+Read/Write Files	Saves/loads the database
+AI Agent	Decides how to answer the question
+OpenAI Chat Model	Provides language understanding/reasoning
+Memory	Maintains conversation context
+
+The template also states that PostgreSQL and MySQL can be used instead of SQLite.
+
+14. How the Workflow Solves a Real-World Problem
+
+Imagine a company has a sales database containing thousands or millions of records.
+A manager might ask:
+"Which product had the highest sales last month?"
+Without this workflow, they might need a data analyst or someone who knows SQL.
+With the workflow:
+Manager
+   ↓
+"What product had the highest sales?"
+   ↓
+AI Agent
+   ↓
+Generate appropriate SQL
+   ↓
+Database
+   ↓
+Return data
+   ↓
+AI interprets result
+   ↓
+Manager receives answer
+
+This reduces the technical barrier for accessing business data.
+n8n describes this approach as allowing people to obtain database insights through natural language instead of requiring them to know SQL.
+
+15. How I Would Recreate the Workflow in n8n
+
+For the assignment, I would build it in the following order.
+Step 1 – Create an n8n workflow
+Open n8n and create a new workflow.
+You can also start from the template using Use workflow; n8n's tutorial explicitly recommends either importing the template or creating it from scratch.
+n8n workflow template
+
+Step 2 – Build the database setup
+Add:
+Manual Trigger
+HTTP Request
+Compression
+Read/Write Files from Disk
+
+Connect them:
+Manual Trigger
+ → HTTP Request
+ → Compression
+ → Read/Write Files from Disk
+
+Run this section to obtain the SQLite database.
+
+Step 3 – Add the Chat Trigger
+Create the second part of the workflow using the Chat Trigger.
+Chat Trigger
+This gives the user a chat interface for asking questions.
+
+Step 4 – Load the database
+Add the file/database node required to make the SQLite database available to the AI workflow.
+
+Step 5 – Add the Set/Edit node
+Use the Set node to combine:
+Chat Trigger information
+Database binary information
+The template's documented expression is:
+{{ $('Chat Trigger').item.json }}
+and the binary file needs to be included.
+
+Step 6 – Add the AI Agent
+Configure the AI Agent as a SQL Agent.
+
+Select:
+Agent type: SQL Agent
+Database: SQLite
+Make sure the input binary field corresponds to the database file.
+
+Step 7 – Connect the OpenAI model
+Add an OpenAI Chat Model and connect it to the AI Agent.
+You will need an appropriate OpenAI credential/API key. The template explicitly lists an OpenAI API key as a requirement, while noting that another model provider can be substituted.
+
+Step 8 – Add memory
+Connect a memory node to the AI Agent so that the chatbot can maintain conversation context.
+
+Step 9 – Test the workflow
+Ask simple questions first.
+For example:
+What are the names of the employees?
+Then try a more complicated question:
+What are the revenues by genre?
+The n8n walkthrough notes that more complex questions can require the SQL agent to perform several requests before arriving at the final answer.
+
+16. Example of Testing
+
+Test 1 – Simple question
+Input:
+What are the names of the employees?
+
+Expected process:
+Chat Trigger
+     ↓
+AI Agent
+     ↓
+Understand question
+     ↓
+Generate SQL
+     ↓
+SQLite database
+     ↓
+Get employee records
+     ↓
+AI formats answer
+Test 2 – More complex question
+
+Input:
+What are the revenues by genre?
+The agent may need multiple steps to understand the database structure, identify the relevant tables, construct the query, execute it, and interpret the results. n8n specifically uses this example to demonstrate that complex database questions can require several requests.
+
+17. What I Learned From This Template
+
+The main thing I learned is that n8n is not only for simple automation.
+It can connect:
+
+User
+ ↓
+AI
+ ↓
+Database
+ ↓
+Business information
+
+The most interesting part is the AI Agent. Instead of creating a fixed workflow for every possible database question, the agent can determine what database actions are required.
+I also learned the importance of separating the workflow into different responsibilities:
+
+Trigger → receives input
+File nodes → handle database files
+AI Agent → reasons about the question
+LLM → understands natural language
+Memory → maintains conversation context
+Database → provides factual data
+
+n8n explains that its visual nodes integrate many of the core LangChain components, allowing AI agents to be built without implementing the entire system from scratch in code.
+
+18. Possible Improvements
+
+The workflow could be improved in several ways.
+
+1. Provide the database schema to the AI
+Instead of making the AI repeatedly determine the database structure, we could provide the schema directly.
+n8n's own walkthrough suggests passing the schema to the agent so it does not have to figure out the structure every time.
+
+2. Add security controls
+In a real company, I would restrict the AI to read-only SQL operations so that a user cannot accidentally modify or delete database information.
+
+3. Use a production database
+Instead of the demonstration SQLite database, the workflow could connect to:
+PostgreSQL
+MySQL
+Both are listed as supported database options in the template.
+
+4. Add another chat platform
+The template uses n8n's embedded chat, but n8n notes that it can be adapted to services such as Slack, Microsoft Teams, or WhatsApp.
+
+19. Final Conclusion
+
+The Chat with a Database using AI template is a good example of how n8n can combine workflow automation, artificial intelligence, and databases to solve a practical business problem.
+The workflow takes a natural-language question from a user, gives it to an AI agent, allows the agent to interact with a database using SQL, and returns the result in an understandable form.
+The most important concept I learned is:
+The AI does not need to know every piece of database information beforehand. Instead, it can use the database as a tool to retrieve the information needed to answer the user's question.
+This makes the workflow useful for business intelligence, internal data assistants, reporting, customer support, and other situations where people need to access structured data without writing SQL themselves. n8n also identifies this general approach as an AI-agent/data-analyst pattern

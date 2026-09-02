@@ -1,0 +1,54 @@
+Assignment 1 – Explore n8n Case Studies
+---------------------------------------
+Case Study 1: Oversee
+---------------------
+ 1. What problem/use case did they have?
+
+Oversee's support and operations teams spent a lot of time manually collecting information from different systems to investigate support issues. Reporting also required data to be gathered manually from multiple sources.
+
+ 2. Where and why did they implement n8n?
+
+Oversee implemented n8n as a **workflow orchestration layer** to connect different systems and automate repetitive support investigations and reporting. They wanted to improve productivity without increasing headcount.
+
+ 3. How was the workflow implemented?
+
+When a support request comes in, n8n collects relevant information from different systems, uses AI to analyze the information, and creates a structured report. n8n is also used to collect data and generate reports from multiple sources based on requests from employees.
+
+ 4. How did n8n help in real-world scenarios?
+
+* Reduced support ticket first-response time by **50%**.
+* Reports that previously took around **2 weeks** could be produced in **2–3 hours**.
+* Around **20 employees** use n8n-enabled workflows.
+* The 8-person operations team uses n8n-powered tools.
+
+Key takeaway: n8n helped Oversee reduce manual investigation and reporting work, allowing employees to focus more on solving customer issues.
+
+---
+
+Case Study 2: System AI
+-----------------------
+ 1. What problem/use case did they have?
+
+System AI's real estate client had repetitive administrative work. Employees and virtual assistants manually copied information from **WhatsApp into Zoho CRM and Google Sheets**, which took several minutes for each task.
+
+ 2. Where and why did they implement n8n?
+
+System AI implemented n8n to automate data entry and connect **WhatsApp, Twilio, AI services, Zoho CRM, and Google Sheets**. They chose n8n to reduce manual work and build scalable AI-powered workflows.
+
+ 3. How was the workflow implemented?
+
+The workflow starts with a WhatsApp message. n8n identifies whether it is text or a voice message, uses AI to understand the request, and then routes it to the appropriate workflow:
+
+Lead request → Zoho CRM
+Property request → Google Sheets
+A confirmation is then sent back through WhatsApp.
+
+ 4. How did n8n help in real-world scenarios?
+
+* Reduced task time from **4–5 minutes to 10–20 seconds**.
+* Achieved a **97% reduction in operation time**.
+* Saved approximately **one day of work every week**.
+* Reduced the time from property onboarding to sale from **62 days to 44 days**.
+* Virtual assistants could focus on higher-value work instead of repetitive data entry.
+
+Key takeaway: n8n automated repetitive data-entry tasks and connected AI with existing business applications, making the real estate process much faster and more efficient.signement
