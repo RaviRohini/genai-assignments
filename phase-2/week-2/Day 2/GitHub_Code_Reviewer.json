@@ -1,0 +1,153 @@
+{
+  "name": "GitHub_Code_Reviewer",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "github-code-reviewer",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -528,
+        -160
+      ],
+      "id": "45da925c-ebc8-4fa8-a0c0-4710618afe3f",
+      "name": "Webhook",
+      "webhookId": "2686061d-0e4c-4985-8de1-9301b247adc8"
+    },
+    {
+      "parameters": {
+        "url": "={{$json.body.githubUrl}}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -304,
+        -160
+      ],
+      "id": "40557eae-fc63-453f-bc06-add2d863668c",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are an expert GitHub Code Reviewer.\nYou will receive source code from the GitHub Code Reviewer workflow.\nThe code to review is provided below:\n==================== SOURCE CODE ====================\n{{$json.data}}\n======================================================\n\nReview this code carefully and provide a professional code review.\n\nREVIEW CRITERIA:\n\n1. Correctness\n- Identify bugs, incorrect logic, edge cases, and possible runtime errors.\n\n2. Code Quality\n- Review readability, naming, structure, consistency, and maintainability.\n\n3. Security\n- Identify security vulnerabilities, unsafe practices, exposed secrets,\n  insecure input handling, and other security risks.\n\n4. Performance\n- Identify inefficient operations, unnecessary processing, and potential\n  performance bottlenecks.\n\n5. Error Handling\n- Check exception handling, validation, and failure scenarios.\n\n6. Testing\n- Identify missing or insufficient test coverage and suggest relevant tests.\n\n7. Maintainability\n- Identify duplicated logic, unnecessary complexity, tight coupling,\n  and difficult-to-maintain code.\n\n8. Best Practices\n- Check whether the code follows appropriate best practices for its\n  programming language/framework.\n\nIMPORTANT REVIEW RULES:\n\n- Do not invent problems that are not supported by the code.\n- Only report findings that you can explain from the provided source code.\n- If a line number can be identified, include it.\n- Distinguish real defects from optional improvements.\n- Be concise and actionable.\n- Provide a recommended fix for each finding.\n- If no significant issue is found, clearly state that.\n\nRETURN THE REVIEW IN THE FOLLOWING STRUCTURE:\n\nOverall Assessment:\n<short overall assessment>\n\nOverall Score:\n<number from 0 to 100>\n\nSummary:\n<short summary of the review>\n\nFindings:\n\n1. Severity: <Critical | High | Medium | Low | Info>\n   Category: <Correctness | Security | Performance | Code Quality | Error Handling | Testing | Maintainability | Best Practice>\n   Line: <line number or range if identifiable>\n   Problem: <what is wrong>\n   Why it matters: <why this is important>\n   Recommended Fix: <specific recommendation>\n\n2. ...\n\nPositive Observations:\n- <good aspects of the code>\n\nTesting Recommendations:\n- <recommended tests>\n\nFinal Recommendation:\n<Approve | Approve with Suggestions | Changes Required>",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -80,
+        -160
+      ],
+      "id": "507e0666-fd1f-46cf-8410-204672566fd3",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ review: $json.text }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        288,
+        -160
+      ],
+      "id": "2186645e-1141-41d3-9031-974e7dac9b52",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-120b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        48
+      ],
+      "id": "4c8a9601-50ee-4dd6-ade7-f0deb20891e3",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "W0WgKgNjwlPGEAfF",
+          "name": "Groq account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "ea323c11-e211-47e9-aad3-811912822cce",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "2d7f7c25161575927c20e0d4a70bc1aa12394f6673bcf7e6f78ddb725de7127a"
+  },
+  "nodeGroups": [],
+  "id": "0VbvihYzCCfUOpOr",
+  "tags": []
+}

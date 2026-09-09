@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="SS GitHub Code Reviewer">
+  <title>GitHub Code Reviewer | SS</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <div class="ambient ambient-blue" aria-hidden="true"></div>
+    <div class="ambient ambient-light" aria-hidden="true"></div>
+
+    <main class="foundation" aria-labelledby="page-title">
+      <section class="welcome-panel">
+        <div class="main-brand">
+          <div class="logo-placeholder" aria-label="SS logo placeholder">SS</div>
+          <span>SS</span>
+        </div>
+        <p class="eyebrow">Code intelligence for confident delivery</p>
+        <h1 id="page-title">GitHub <span>Code Reviewer</span></h1>
+        <p class="intro">Review code with clarity, consistency, and a sharper view of what ships next.</p>
+        <div class="foundation-line" aria-hidden="true"></div>
+        <p class="phase-label">SS / GITHUB CODE REVIEWER</p>
+      </section>
+
+      <section class="review-workspace" aria-labelledby="review-workspace-title">
+        <div class="workspace-header">
+          <p class="workspace-kicker">GitHub Source Review</p>
+          <h2 id="review-workspace-title">Review a GitHub source file</h2>
+        </div>
+
+        <div class="review-layout">
+          <div class="repository-panel url-panel">
+            <label class="url-label" for="github-url">Enter the GitHub URL here</label>
+            <p class="url-help">Paste a raw GitHub file URL to begin the review.</p>
+            <input id="github-url" class="url-input" type="url" placeholder="https://raw.githubusercontent.com/owner/repository/main/src/example.java" autocomplete="url" required>
+            <div id="file-error" class="status-block error hidden" aria-live="polite"></div>
+            <div class="review-controls">
+              <button id="review-button" type="button" class="review-button">Review Code</button>
+            </div>
+          </div>
+
+          <div id="review-panel" class="review-result-panel" aria-live="polite">
+            <div id="review-loading" class="status-block review-loading hidden">Analyzing code...</div>
+            <div id="review-error" class="status-block review-error hidden"></div>
+            <div id="review-empty" class="state-card empty-state">
+              <div class="state-header"><span class="state-tag">Ready</span></div>
+              <h3>Your review will appear here</h3>
+              <p>Enter a GitHub URL and select Review Code to send it to the review workflow.</p>
+            </div>
+            <div id="review-output" class="review-output hidden"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer" aria-label="SS footer">
+      <div class="footer-inner">
+        <span class="footer-brand">SS</span>
+        <span class="footer-app">GitHub Code Reviewer</span>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    const WEBHOOK_URL = 'http://localhost:5678/webhook/github-code-reviewer';
+
+    const fileError = document.getElementById('file-error');
+    const githubUrlInput = document.getElementById('github-url');
+    const reviewButton = document.getElementById('review-button');
+    const reviewLoading = document.getElementById('review-loading');
+    const reviewError = document.getElementById('review-error');
+    const reviewEmpty = document.getElementById('review-empty');
+    const reviewOutput = document.getElementById('review-output');
+    const reviewPanel = document.getElementById('review-panel');
+    let currentReviewHtml = '';
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function renderInlineMarkdown(value) {
+      return escapeHtml(value)
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/__([^_]+)__/g, '<strong>$1</strong>')
+        .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+        .replace(/_([^_]+)_/g, '<em>$1</em>');
+    }
+
+    function renderMarkdown(markdown) {
+      const lines = String(markdown ?? '').replace(/\r\n/g, '\n').split('\n');
+      const html = [];
+      let inCodeBlock = false;
+      let codeLanguage = '';
+      let codeLines = [];
+      let listType = null;
+
+      const closeList = () => {
+        if (listType) {
+          html.push(`</${listType}>`);
+          listType = null;
+        }
+      };
+
+      const renderTable = (startIndex) => {
+        const headerCells = lines[startIndex].split('|').slice(1, -1);
+        const rows = [];
+        let index = startIndex + 2;
+
+        while (index < lines.length && lines[index].trim().startsWith('|')) {
+          rows.push(lines[index].split('|').slice(1, -1));
+          index += 1;
+        }
+
+        html.push('<div class="review-table-wrap"><table class="review-table"><thead><tr>');
+        headerCells.forEach((cell) => html.push(`<th scope="col">${renderInlineMarkdown(cell.trim())}</th>`));
+        html.push('</tr></thead><tbody>');
+        rows.forEach((row) => {
+          html.push('<tr>');
+          headerCells.forEach((_, cellIndex) => {
+            html.push(`<td>${renderInlineMarkdown((row[cellIndex] || '').trim())}</td>`);
+          });
+          html.push('</tr>');
+        });
+        html.push('</tbody></table></div>');
+        return index;
+      };
+
+      for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index];
+        const trimmed = line.trim();
+
+        if (trimmed.startsWith('```')) {
+          if (inCodeBlock) {
+            html.push(`<pre class="review-code"><code${codeLanguage ? ` data-language="${escapeHtml(codeLanguage)}"` : ''}>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+            inCodeBlock = false;
+            codeLanguage = '';
+            codeLines = [];
+          } else {
+            closeList();
+            inCodeBlock = true;
+            codeLanguage = trimmed.slice(3).trim();
+          }
+          continue;
+        }
+
+        if (inCodeBlock) {
+          codeLines.push(line);
+          continue;
+        }
+
+        if (trimmed === '') {
+          closeList();
+          continue;
+        }
+
+        if (trimmed.startsWith('|') && index + 1 < lines.length && /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(lines[index + 1].trim())) {
+          closeList();
+          index = renderTable(index) - 1;
+          continue;
+        }
+
+        const heading = trimmed.match(/^(#{1,6})\s+(.+)$/);
+        if (heading) {
+          closeList();
+          const level = heading[1].length;
+          html.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+          continue;
+        }
+
+        const unorderedItem = trimmed.match(/^[-*+]\s+(.+)$/);
+        const orderedItem = trimmed.match(/^\d+[.)]\s+(.+)$/);
+        if (unorderedItem || orderedItem) {
+          const nextListType = unorderedItem ? 'ul' : 'ol';
+          if (listType !== nextListType) {
+            closeList();
+            listType = nextListType;
+            html.push(`<${listType}>`);
+          }
+          html.push(`<li>${renderInlineMarkdown((unorderedItem || orderedItem)[1])}</li>`);
+          continue;
+        }
+
+        closeList();
+        html.push(`<p>${renderInlineMarkdown(trimmed)}</p>`);
+      }
+
+      if (inCodeBlock) {
+        html.push(`<pre class="review-code"><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+      }
+      closeList();
+      return html.join('');
+    }
+
+    function getWebhookReviewText(response) {
+      const strings = [];
+      const collectStrings = (value) => {
+        if (typeof value === 'string' && value.trim()) {
+          strings.push(value.trim());
+          return;
+        }
+        if (Array.isArray(value)) {
+          value.forEach(collectStrings);
+          return;
+        }
+        if (value && typeof value === 'object') {
+          Object.values(value).forEach(collectStrings);
+        }
+      };
+
+      collectStrings(response);
+      return strings.sort((left, right) => right.length - left.length)[0] || '';
+    }
+
+    function isStructuredReview(result) {
+      return result && typeof result === 'object' && !Array.isArray(result)
+        && (result.overallAssessment || result.score !== undefined || Array.isArray(result.findings));
+    }
+
+    function getReviewScore(reviewText) {
+      const scoreMatch = reviewText.match(/Overall\s+Score\b[\s\S]{0,60}?(\d{1,3})\s*\/\s*100/i);
+      return scoreMatch ? Number(scoreMatch[1]) : null;
+    }
+
+    function hasHighSeverityFinding(reviewText) {
+      const noneFoundPattern = /\bno\b[^\n]{0,40}\b(?:critical|high)\b[^\n]{0,60}\b(?:severity|finding|issue|problem|defect)/i;
+      const tableRowPattern = /\|\s*\d+\s*\|\s*\**\s*(?:Critical|High)\s*\**\s*\|/i;
+      const severityLabelPattern = /Severity\s*\**\s*:\s*\**\s*(?:Critical|High)\b/i;
+      const badgePattern = /severity-(?:critical|high)/i;
+
+      const lines = reviewText.split(/\r?\n/).filter((line) => !noneFoundPattern.test(line));
+      const cleanedText = lines.join('\n');
+
+      return tableRowPattern.test(cleanedText)
+        || severityLabelPattern.test(cleanedText)
+        || badgePattern.test(cleanedText);
+    }
+
+    function getMergeDecision(score, hasHighSeverity) {
+      if (score === null) {
+        return {
+          tier: 'blocked',
+          icon: '❌',
+          label: 'No merge (blocked)',
+          detail: 'The response did not include a recognizable overall score.'
+        };
+      }
+
+      let decision;
+
+      if (score <= 64) {
+        decision = {
+          tier: 'blocked',
+          icon: '❌',
+          label: 'No merge (blocked)',
+          detail: 'Critical issues — failing tests, security vulnerabilities, broken build, or major bugs.'
+        };
+      } else if (score <= 69) {
+        decision = {
+          tier: 'manual',
+          icon: '⚠️',
+          label: 'Merge with mandatory manual review',
+          detail: 'Risky changes — low test coverage, high complexity, or several moderate issues that need a human sign-off before merging.'
+        };
+      } else if (score <= 79) {
+        decision = {
+          tier: 'manual',
+          icon: '⚠️',
+          label: 'Merge with manual review required',
+          detail: 'Acceptable but not clean — style violations, some code smells, or missing edge-case handling.'
+        };
+      } else if (score <= 89) {
+        decision = {
+          tier: 'standard',
+          icon: '✅',
+          label: 'Merge with standard review',
+          detail: 'Good quality — normal PR review process, no blocking concerns.'
+        };
+      } else {
+        decision = {
+          tier: 'fast-track',
+          icon: '✅',
+          label: 'Eligible for auto-merge / fast-track',
+          detail: 'Excellent — high coverage, clean lint, no security flags, passes all automated checks.'
+        };
+      }
+
+      if (hasHighSeverity && decision.tier !== 'blocked') {
+        return {
+          tier: 'manual',
+          icon: '⚠️',
+          label: 'Merge with mandatory manual review',
+          detail: 'A Critical or High severity finding was identified and overrides the score-based recommendation.'
+        };
+      }
+
+      return decision;
+    }
+
+    function removeSummaryLines(markdown) {
+      const labelPattern = /^\s*(?:#{1,6}\s*)?(?:\*{1,2})?(?:Overall Score|Overall Rating|Decision|Review Status)(?:\*{1,2})?\s*:/i;
+      const loneValuePattern = /^\s*(?:\*{1,2})?\d{1,3}\s*(?:\/\s*100)?(?:\*{1,2})?\s*$/;
+      const lines = String(markdown ?? '').split(/\r?\n/);
+      const kept = [];
+
+      for (let index = 0; index < lines.length; index += 1) {
+        if (labelPattern.test(lines[index])) {
+          let lookahead = index + 1;
+          while (lookahead < lines.length && lines[lookahead].trim() === '') {
+            lookahead += 1;
+          }
+          if (lookahead < lines.length && loneValuePattern.test(lines[lookahead])) {
+            index = lookahead;
+          }
+          continue;
+        }
+        kept.push(lines[index]);
+      }
+
+      return kept.join('\n').replace(/\n{3,}/g, '\n\n');
+    }
+
+    function downloadReview() {
+      if (!currentReviewHtml) {
+        return;
+      }
+
+      const documentHtml = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>GitHub Code Review Report</title>
+<style>
+  body { font-family: Calibri, "Segoe UI", sans-serif; margin: 0; padding: 2rem; color: #17233d; background: #f7faff; }
+  h1 { color: #2454c6; font-size: 1.5rem; margin: 0 0 1.5rem; }
+  h2, h3, h4 { color: #17233d; }
+  .score-card, .review-summary-bar { display: flex; gap: 1rem; margin-bottom: 1.25rem; }
+  .score-card > div, .review-score-summary, .merge-summary { flex: 1; border: 1px solid #dbe5f3; border-radius: 0.75rem; padding: 1rem; background: #ffffff; }
+  .score-label, .summary-label { color: #61708c; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .score-value, .review-score-summary strong { color: #17367f; font-size: 1.75rem; font-weight: 800; display: block; margin-top: 0.25rem; }
+  .assessment-block, .findings-section, .section-box, .markdown-review, .category-score-list { border: 1px solid #dbe5f3; border-radius: 0.9rem; padding: 1rem 1.1rem; background: #ffffff; margin-bottom: 1.25rem; }
+  .finding-card { border: 1px solid #dbe5f3; border-radius: 0.9rem; padding: 1rem; margin-bottom: 0.9rem; background: #f7faff; }
+  .severity-badge { display: inline-block; padding: 0.25rem 0.55rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+  th, td { border: 1px solid #dbe5f3; padding: 0.6rem 0.75rem; text-align: left; }
+  th { background: #e6f5fc; }
+  pre { background: #17233d; color: #f7faff; padding: 1rem; border-radius: 0.7rem; overflow-x: auto; }
+  code { font-family: Consolas, "Courier New", monospace; }
+</style>
+</head>
+<body>
+<h1>GitHub Code Review Report</h1>
+${currentReviewHtml}
+</body>
+</html>`;
+
+      const blob = new Blob([documentHtml], { type: 'text/html;charset=utf-8' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'github-code-review.html';
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }
+
+    function getCategoryScores(reviewText) {
+      const categories = [
+        'Correctness',
+        'Security',
+        'Code Quality',
+        'Performance',
+        'Testing',
+        'Maintainability',
+        'Error Handling'
+      ];
+
+      return categories
+        .map((category) => {
+          const match = reviewText.match(new RegExp(`${category.replace(' ', '\\s+')}\\s*:?\\s*(\\d{1,3})\\s*(?:\\/\\s*100)?`, 'i'));
+          return match ? { category, score: Number(match[1]) } : null;
+        })
+        .filter(Boolean);
+    }
+
+    function renderReviewResult(result) {
+      const findingMarkup = (result.findings || [])
+        .map((finding) => `
+          <article class="finding-card">
+            <div class="finding-top">
+              <strong>${escapeHtml(finding.category)}</strong>
+              <span class="severity-badge severity-${escapeHtml(finding.severity).toLowerCase()}">${escapeHtml(finding.severity)}</span>
+            </div>
+            <div class="finding-meta">
+              <div><strong>File:</strong> ${escapeHtml(finding.file)}</div>
+              <div><strong>Line:</strong> ${escapeHtml(finding.line)}</div>
+            </div>
+            <p><strong>Problem:</strong> ${escapeHtml(finding.problem)}</p>
+            <p><strong>Why it matters:</strong> ${escapeHtml(finding.why)}</p>
+            <p><strong>Recommended Fix:</strong> ${escapeHtml(finding.recommendedFix)}</p>
+          </article>
+        `)
+        .join('');
+
+      const resultContentHtml = `
+        <div class="score-card">
+          <div>
+            <div class="score-label">Overall Score</div>
+            <div class="score-value">${escapeHtml(result.score)}</div>
+          </div>
+          <div>
+            <div class="score-label">Final Recommendation</div>
+            <div class="score-value small">${escapeHtml(result.finalRecommendation)}</div>
+          </div>
+        </div>
+
+        <div class="assessment-block">
+          <h3>Overall Assessment</h3>
+          <p class="summary-text">${escapeHtml(result.overallAssessment)}</p>
+          <p class="summary-text"><strong>Summary:</strong> ${escapeHtml(result.summary)}</p>
+        </div>
+
+        <div class="findings-section">
+          <h3>Findings</h3>
+          <div class="findings-grid">${findingMarkup}</div>
+        </div>
+
+        <div class="section-box">
+          <h3>Positive Observations</h3>
+          <ul>
+            ${(result.positiveObservations || []).map((item) => `<li>${escapeHtml(item)}</li>`).join('')}
+          </ul>
+        </div>
+
+        <div class="section-box">
+          <h3>Recommended Improvements</h3>
+          <ul>
+            ${(result.recommendedImprovements || []).map((item) => `<li>${escapeHtml(item)}</li>`).join('')}
+          </ul>
+        </div>
+
+        <div class="section-box">
+          <h3>Testing Recommendations</h3>
+          <ul>
+            ${(result.testingRecommendations || []).map((item) => `<li>${escapeHtml(item)}</li>`).join('')}
+          </ul>
+        </div>
+
+        <div class="section-box">
+          <h3>Final Recommendation</h3>
+          <div class="final-recommendation">${escapeHtml(result.finalRecommendation)}</div>
+        </div>
+      `;
+
+      currentReviewHtml = resultContentHtml;
+      reviewOutput.innerHTML = `
+        <div class="result-toolbar">
+          <div class="review-completion" role="status">Review completed</div>
+          <button type="button" class="export-button" data-export-review>Export Review</button>
+        </div>
+        ${resultContentHtml}
+      `;
+
+      reviewOutput.classList.remove('hidden');
+    }
+
+    function renderWebhookResponse(response) {
+      if (isStructuredReview(response)) {
+        renderReviewResult(response);
+        return;
+      }
+
+      const reviewText = getWebhookReviewText(response);
+      if (!reviewText) {
+        throw new Error('The webhook returned an empty review response.');
+      }
+
+      const score = getReviewScore(reviewText);
+      const criticalFinding = hasHighSeverityFinding(reviewText);
+      const mergeDecision = getMergeDecision(score, criticalFinding);
+      const categoryScores = getCategoryScores(reviewText);
+      const cleanedReviewText = removeSummaryLines(reviewText);
+      const webhookContentHtml = `
+        <div class="review-summary-bar">
+          <div class="review-score-summary">
+            <span class="summary-label">Overall Score</span>
+            <strong>${score === null ? 'Not available' : `${score} / 100`}</strong>
+          </div>
+          <div class="merge-summary">
+            <span class="summary-label">Merge Recommendation</span>
+            <strong class="decision-${mergeDecision.tier}">${mergeDecision.icon} ${escapeHtml(mergeDecision.label)}</strong>
+            <span>${escapeHtml(mergeDecision.detail)}</span>
+          </div>
+        </div>
+        ${categoryScores.length ? `
+          <div class="category-score-list" aria-label="Category scores">
+            ${categoryScores.map((item) => `
+              <div class="category-score-item">
+                <span>${escapeHtml(item.category)}</span>
+                <strong>${item.score} / 100</strong>
+              </div>
+            `).join('')}
+          </div>
+        ` : ''}
+        <article class="markdown-review" aria-label="Completed code review">
+          ${renderMarkdown(cleanedReviewText)}
+        </article>
+      `;
+
+      currentReviewHtml = webhookContentHtml;
+      reviewOutput.innerHTML = `
+        <div class="result-toolbar">
+          <div class="review-completion" role="status">Review completed</div>
+          <button type="button" class="export-button" data-export-review>Export Review</button>
+        </div>
+        ${webhookContentHtml}
+      `;
+      reviewOutput.classList.remove('hidden');
+    }
+
+    async function sendReviewToWebhook(githubUrl) {
+      const payload = {
+        action: 'review',
+        githubUrl,
+        requestedAt: new Date().toISOString()
+      };
+
+      const response = await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Webhook request failed with status ${response.status}.`);
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        return response.json();
+      }
+
+      return { rawResponse: await response.text() };
+    }
+
+    async function handleReviewCode() {
+      const githubUrl = githubUrlInput.value.trim();
+      fileError.classList.add('hidden');
+      reviewError.classList.add('hidden');
+
+      if (!githubUrl || !isGitHubUrl(githubUrl)) {
+        fileError.textContent = 'Enter a valid GitHub URL before starting the review.';
+        fileError.classList.remove('hidden');
+        githubUrlInput.focus();
+        return;
+      }
+
+      reviewButton.disabled = true;
+      reviewEmpty.classList.add('hidden');
+      reviewLoading.classList.remove('hidden');
+      reviewOutput.classList.add('hidden');
+      reviewPanel.classList.remove('hidden');
+
+      try {
+        const webhookResult = await sendReviewToWebhook(githubUrl);
+
+        if (webhookResult) {
+          renderWebhookResponse(webhookResult);
+          return;
+        }
+      } catch (error) {
+        reviewError.textContent = `AI review could not be completed: ${error.message}`;
+        reviewError.classList.remove('hidden');
+      } finally {
+        reviewLoading.classList.add('hidden');
+        reviewButton.disabled = false;
+      }
+    }
+
+    function isGitHubUrl(value) {
+      try {
+        const url = new URL(value);
+        if (url.protocol !== 'https:') {
+          return false;
+        }
+
+        const parts = url.pathname.split('/').filter(Boolean);
+        if (url.hostname === 'raw.githubusercontent.com') {
+          return parts.length >= 4;
+        }
+
+        return (url.hostname === 'github.com' || url.hostname === 'www.github.com')
+          && parts.length >= 5
+          && parts[2] === 'blob';
+      } catch (error) {
+        return false;
+      }
+    }
+
+    reviewButton.addEventListener('click', handleReviewCode);
+    reviewOutput.addEventListener('click', (event) => {
+      if (event.target.matches('[data-export-review]')) {
+        downloadReview();
+      }
+    });
+    githubUrlInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        handleReviewCode();
+      }
+    });
+  </script>
+</body>
+</html>
