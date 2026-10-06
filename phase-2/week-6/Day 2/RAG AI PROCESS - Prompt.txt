@@ -1,0 +1,545 @@
+# ICESPOT Prompt: RAG AI PROCESS Enhancement
+
+## I — Instruction
+
+Enhance the existing Resume RAG application by introducing a new **“RAG AI PROCESS”** stage between the existing **Search Mode** and **Results Limit** sections.
+
+The new RAG AI PROCESS should automatically process the resumes retrieved from the selected search mode and perform:
+
+1. **Re-ranking** of retrieved resumes.
+2. **Deduplication** of repeated resumes.
+3. **Summarization** of the final relevant results.
+4. Complete end-to-end integration from search → RAG AI PROCESS → final results.
+
+Do not rebuild or replace existing working functionality. First inspect the current implementation and integrate the new functionality into the existing architecture.
+
+---
+
+# C — Context
+
+The application already supports different resume retrieval modes:
+
+* **Vector Search**
+* **BM25 Keyword Search**
+* **Hybrid Search**
+
+The selected search mode determines how resumes are initially retrieved.
+
+The enhanced workflow should be:
+
+```text
+User enters search query
+        ↓
+Select Search Mode
+(Vector / BM25 / Hybrid)
+        ↓
+Retrieve Resumes
+        ↓
+RAG AI PROCESS
+        ↓
+Re-ranking
+        ↓
+Deduplication
+        ↓
+Final Result Selection
+        ↓
+Summarization
+        ↓
+Display Final Results
+```
+
+The **RAG AI PROCESS** should automatically start after resume retrieval. The user should not need to manually trigger each RAG operation.
+
+---
+
+# E — Example
+
+### UI Layout
+
+The existing search section should be enhanced to look conceptually like:
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ Search Mode                                                   │
+│ [ Vector Search ▼ ]                                          │
+│                                                              │
+│ RAG AI PROCESS                                                │
+│ ┌──────────────────────────────────────────────────────────┐ │
+│ │ ✓ Re-ranking                                              │ │
+│ │ ✓ Deduplication                                           │ │
+│ │ ✓ Summarization                                           │ │
+│ └──────────────────────────────────────────────────────────┘ │
+│                                                              │
+│ Results Limit                                                 │
+│ [ 10 ▼ ]                                                     │
+└──────────────────────────────────────────────────────────────┘
+```
+
+The RAG AI PROCESS should automatically execute after retrieval.
+
+### Processing Example
+
+If the user selects:
+
+```text
+Search Mode: Vector Search
+Results Limit: 10
+```
+
+The application should:
+
+```text
+Vector Search
+     ↓
+Retrieve candidate resumes
+     ↓
+RAG AI PROCESS
+     ↓
+Re-rank resumes
+     ↓
+Remove duplicate resumes
+     ↓
+Select most relevant resumes
+     ↓
+Generate final summary
+     ↓
+Display results
+```
+
+The same workflow must work when the user selects:
+
+```text
+BM25 Keyword Search
+```
+
+or:
+
+```text
+Hybrid Search
+```
+
+The RAG processing should operate on the results returned by the selected retrieval method.
+
+---
+
+# S — Scope
+
+## 1. RAG AI PROCESS UI
+
+Add a clearly visible **RAG AI PROCESS** box between **Search Mode** and **Results Limit**.
+
+The section should visually communicate the processing stages:
+
+* Re-ranking
+* Deduplication
+* Summarization
+
+Show appropriate status indicators such as:
+
+```text
+⏳ Processing...
+✓ Completed
+⚠ Warning
+✕ Failed
+```
+
+Do not use excessive animation. Keep the design professional.
+
+---
+
+## 2. Re-ranking
+
+Implement a re-ranking stage that evaluates the retrieved resumes against the user's search query.
+
+Requirements:
+
+* Re-rank retrieved resumes based on relevance.
+* Preserve relevant resume metadata.
+* Display the final ranking clearly.
+* Higher relevance should appear first.
+* Avoid inventing candidate information.
+
+Re-ranking Score Display
+
+Display it directly on each resume card:
+
+┌─────────────────────────────────────────┐
+│ #1  Candidate Name                      │
+│                                         │
+│ Re-ranking Score: 94%                   │
+│ ███████████████████░                    │
+│                                         │
+│ Skills: Java, Selenium, API Testing     │
+│ Experience: 4+ Years                    │
+└─────────────────────────────────────────┘
+Recommended interpretation
+Score	Meaning
+90–100%	Highly relevant
+75–89%	Very relevant
+60–74%	Relevant
+40–59%	Partially relevant
+0–39%	Low relevance
+Important implementation rule
+
+The score should be calculated from the actual re-ranking process, not hardcoded.
+
+For example:
+
+Initial Retrieval
+      ↓
+20 resumes retrieved
+      ↓
+Deduplication
+      ↓
+15 unique resumes
+      ↓
+Re-ranking
+      ↓
+Resume A → 94%
+Resume B → 89%
+Resume C → 82%
+...
+      ↓
+Final Results
+
+The UI can show:
+
+Re-ranking: 15 resumes evaluated → Top 10 selected
+
+and each resume can show:
+
+Re-ranking Score: 94%
+
+Add this to your ICESPOT prompt
+
+Re-ranking Score Display: Calculate a normalized re-ranking relevance score between 0 and 100 for every final resume based on its relevance to the user's search query. Display the score prominently on each resume result card as a percentage. Sort the final results in descending order of the re-ranking score. The score must be dynamically calculated from the actual re-ranking process and must not be hardcoded. Also display a processing summary showing how many resumes were evaluated, how many were re-ranked, and how many were selected for the final results.
+
+Example:
+
+```text
+Original Results: 20
+
+After Re-ranking:
+1. Candidate A — 95%
+2. Candidate B — 91%
+3. Candidate C — 87%
+```
+
+The actual scoring mechanism should reuse the existing RAG/retrieval architecture where possible.
+
+---
+
+## 3. Deduplication
+
+Remove duplicate resumes before displaying the final results.
+
+Duplicates may occur when:
+
+* Vector Search returns the same resume multiple times.
+* BM25 returns overlapping results.
+* Hybrid Search combines results from multiple retrieval methods.
+
+Use a reliable unique identifier such as:
+
+* Resume ID
+* MongoDB document ID
+* Source file identifier
+* Resume hash
+
+The final UI must not display the same resume more than once.
+
+---
+
+## 4. Summarization
+
+After re-ranking and deduplication, generate a concise summary of the final relevant resumes.
+
+The summary should:
+
+* Be based only on retrieved resume information.
+* Highlight relevant skills and experience.
+* Explain the overall relevance of the results.
+* Avoid hallucinating candidate information.
+* Clearly separate summary information from individual resume data.
+
+Example:
+
+```text
+RAG AI Summary
+
+5 relevant resumes were identified.
+
+Most candidates have strong experience in
+Java, Selenium and API testing. The top-ranked
+candidates have relevant automation testing
+experience and closely match the search criteria.
+```
+
+---
+
+## 5. Search Mode Integration
+
+The application must support:
+
+### Vector Search
+
+```text
+Query
+ ↓
+Vector Search
+ ↓
+RAG AI PROCESS
+ ↓
+Final Results
+```
+
+### BM25 Keyword Search
+
+```text
+Query
+ ↓
+BM25 Search
+ ↓
+RAG AI PROCESS
+ ↓
+Final Results
+```
+
+### Hybrid Search
+
+```text
+Query
+ ↓
+Vector + BM25
+ ↓
+Merge Results
+ ↓
+RAG AI PROCESS
+ ↓
+Final Results
+```
+
+Do not create separate duplicated RAG implementations for each search mode. Create a reusable RAG processing pipeline.
+
+---
+
+## 6. Processing Summary on the Right Side
+
+Once processing is completed and final resumes are displayed, show small information boxes at the top of the results section.
+
+For example:
+
+```text
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│ Re-ranking      │ │ Deduplication   │ │ Summarization   │
+│ ✓ Completed     │ │ ✓ Completed     │ │ ✓ Completed     │
+│ 20 → 10 results │ │ 20 → 15 unique  │ │ Generated       │
+└─────────────────┘ └─────────────────┘ └─────────────────┘
+```
+
+The information should be based on actual processing results.
+
+For example:
+
+* Number of resumes retrieved
+* Number of duplicates removed
+* Number of resumes after re-ranking
+* Number of final results
+* Summary generation status
+
+Do not display hardcoded values.
+
+---
+
+## 7. Final Results
+
+After all RAG AI PROCESS stages are completed, display the final relevant resumes clearly.
+
+Each result should provide appropriate information such as:
+
+* Rank
+* Candidate name
+* Relevant skills
+* Experience
+* Current organization
+* Relevance score
+* Other useful existing resume metadata
+
+Use cards or another professional result layout.
+
+---
+
+## 8. Organization Branding
+
+Apply the following organization-specific branding:
+
+### Organization
+
+**SS**
+
+Display **SS** in the **top-right corner** of the application.
+
+### Theme
+
+Use **Royal Blue** as the primary brand colour.
+
+Apply the theme consistently to:
+
+* Header
+* Buttons
+* Search controls
+* RAG AI PROCESS section
+* Result highlights
+* Status indicators where appropriate
+
+Do not overuse the colour. Maintain a professional visual hierarchy.
+
+### Framework
+
+Use the existing **Photon framework** for the UI implementation.
+
+Do not introduce another UI framework unless the existing application requires it.
+
+---
+
+## 9. Professional Responsive Design
+
+Ensure the application is responsive across:
+
+* Desktop
+* Laptop
+* Tablet
+* Mobile
+
+The RAG AI PROCESS section and result information boxes should adapt appropriately to smaller screens.
+
+Maintain:
+
+* Consistent spacing
+* Clear typography
+* Proper alignment
+* Professional cards
+* Accessible controls
+* Clean visual hierarchy
+
+---
+
+## 10. Application States
+
+Implement clear UI feedback for:
+
+### Loading
+
+```text
+Retrieving resumes...
+RAG AI PROCESS in progress...
+Re-ranking results...
+Removing duplicates...
+Generating summary...
+```
+
+### Success
+
+```text
+RAG AI PROCESS completed successfully.
+```
+
+### Validation
+
+Display clear validation messages for invalid or incomplete searches.
+
+### Empty Results
+
+Display a professional message when no relevant resumes are found.
+
+### Error
+
+Handle retrieval, RAG processing, API, MongoDB, and summarization failures gracefully.
+
+Do not expose technical stack traces to end users.
+
+---
+
+# P — Persona
+
+Act as a **Senior Full-Stack AI/RAG Engineer and UI/UX Architect**.
+
+You should:
+
+* Understand the existing code before making changes.
+* Follow the current architecture.
+* Reuse existing services and components.
+* Keep backend and frontend responsibilities separated.
+* Design maintainable and scalable RAG processing.
+* Follow clean coding practices.
+* Consider performance and error handling.
+* Preserve existing functionality.
+* Avoid unnecessary architectural changes.
+
+---
+
+# O — Output
+
+Implement the feature completely and provide:
+
+1. Updated RAG processing pipeline.
+2. Re-ranking implementation.
+3. Deduplication implementation.
+4. Summarization implementation.
+5. End-to-end integration with:
+
+   * Vector Search
+   * BM25 Keyword Search
+   * Hybrid Search
+6. New **RAG AI PROCESS** UI section.
+7. Processing status indicators.
+8. Right-side/top processing summary boxes.
+9. SS organization branding.
+10. Royal Blue theme.
+11. Photon-based professional UI.
+12. Responsive design.
+13. Loading, success, validation, empty-result and error states.
+14. Unit/integration tests where applicable.
+
+After implementation, provide:
+
+* Files modified/created
+* API changes
+* Processing flow
+* Test results
+* Any configuration changes
+* Instructions to run and validate the feature
+* Any known limitations
+
+### Acceptance Criteria
+
+The feature is complete when:
+
+* [ ] RAG AI PROCESS appears between Search Mode and Results Limit.
+* [ ] Vector Search triggers the RAG pipeline.
+* [ ] BM25 Search triggers the RAG pipeline.
+* [ ] Hybrid Search triggers the RAG pipeline.
+* [ ] Retrieved resumes are re-ranked.
+* [ ] Duplicate resumes are removed.
+* [ ] Final results are summarized.
+* [ ] Processing happens automatically after retrieval.
+* [ ] Processing statistics are displayed in the UI.
+* [ ] Final results are displayed clearly.
+* [ ] SS appears in the top-right corner.
+* [ ] Royal Blue branding is applied.
+* [ ] Photon framework is used.
+* [ ] UI is responsive.
+* [ ] Loading, success, validation, empty and error states are handled.
+* [ ] Existing Resume RAG functionality continues to work.
+
+---
+
+# T — Tone
+
+Use a **professional, clean, modern, enterprise-grade tone** for both the UI and implementation.
+
+The UI should feel suitable for an organization's internal recruitment/resume-search platform.
+
+Avoid unnecessary visual complexity, excessive animations, or clutter.
+
+**Important:** Before implementing anything, inspect the existing application thoroughly. Reuse the current retrieval, MongoDB, RAG, API, and UI architecture wherever possible. Do not rewrite working functionality unless required for this feature.
