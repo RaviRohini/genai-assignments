@@ -1,0 +1,160 @@
+MongoDB MCP Tasks — Questions and Answers
+
+
+TASK 1: DATABASE DISCOVERY
+
+Question:
+- Connect to MongoDB using the MongoDB MCP Server.
+- Retrieve and list all available database names.
+- Identify the RAG_TestCase database and explore.
+- Display the RAG_TestCase database details.
+
+Answer:
+Connected to MongoDB and found 6 databases:
+
+Database             Reported size (bytes)
+HR_Resume             2,289,664
+RAG_TestCase         61,419,520
+chunking_playground  39,960,960
+sample_mflix        149,831,680
+admin                         0
+local                         0
+
+Explored RAG_TestCase:
+- Collections: TestCase, UserStory, conversation_history, generation_memory
+- Documents: 6,548
+- Data size: 93,891,671 bytes
+- Storage size: 60,821,504 bytes
+- Indexes: 7
+- Views: 0
+
+
+TASK 2: COLLECTION DISCOVERY
+
+Question:
+- Retrieve and list all collection names available in the selected database.
+- Identify the purpose of each collection based on its name.
+- Explore the available collections.
+
+Answer:
+The selected database was RAG_TestCase. It contains four collections:
+
+1. TestCase — 6,354 documents
+   Likely stores test cases, including titles, steps, expected results, priority,
+   links to stories, and embeddings.
+
+2. UserStory — 190 documents
+   Likely stores user-story or issue records, including descriptions, status,
+   acceptance criteria, project details, and embeddings.
+
+3. conversation_history — 1 document
+   Likely stores conversation sessions and their messages.
+
+4. generation_memory — 3 documents
+   Likely stores generated test cases and related metadata, such as user queries,
+   retrieved-document references, and generation status.
+
+The purposes are inferred from collection names and sampled fields. Collection
+schemas were inspected using samples and may vary across documents.
+
+
+TASK 3: SAMPLE DATA RETRIEVAL
+
+Question:
+- Retrieve sample documents from each collection.
+- Display at least 5 sample records per collection (where available).
+- Understand and identify the document structure.
+- Identify field names, data types, nested objects, and arrays.
+
+Answer:
+Samples were retrieved from all four collections. Embedding vectors and
+conversation message content were omitted from the display to keep the samples
+readable. Field types are inferred from samples and may not cover every variation.
+
+TestCase — 5 of 6,354 documents:
+
+ID       | Module                  | Title                 | Priority | Type
+TC_028   | Registration             | Demerge UHID           | P1       | Integration
+TC_029   | Registration             | Reissue UHID           | P1       | Integration
+TC_1025  | AT (Admission Module)    | SpecialNotes           | P1       | UI
+TC_030   | Registration             | Reprint UHID Card      | P1       | Integration
+TC_063   | Registration             | Edit contact info      | P1       | Integration
+
+The records also contain steps, expectedResults, and linkedStories. For example,
+TC_028 has six test steps and an expected result describing successful UHID
+demerging.
+
+Structure and types observed:
+- _id: ObjectId
+- module, id, title, preRequisites, description, steps, expectedResults,
+  priority, linkedStories, risk, version, type, sourceFile: strings
+- createdDate and lastModifiedDate: numbers
+- createdAt: date
+- embedding: array of numbers
+- embeddingMetadata: nested document containing model/provider strings and
+  createdAt date
+
+UserStory — 5 of 190 documents:
+
+Key     | Summary                                      | Status       | Priority | Project
+HC-228  | Radiology Transactions Reporting Worklist    | To Do        | P1       | Health Care
+HC-207  | Wards Dashboard Nurse Activities              | To Do        | P1       | Health Care
+HC-218  | Wards Dashboard View Request                  | Done         | P1       | Health Care
+HC-137  | Consultant Dashboard My Appointments          | In Progress  | P2       | Health Care
+HC-150  | Radiology Transactions Technicians Worklist   | To Do        | P1       | Health Care
+
+The sampled records also include acceptanceCriteria and sourceType (for example,
+"excel").
+
+Structure and types observed:
+- _id: ObjectId
+- key, summary, description, project, acceptanceCriteria, businessValue, risk,
+  dependencies, notes, url, sourceType: strings
+- status: nested document with name and category strings
+- priority: nested document with name and id strings
+- components, labels, fixVersions, issueLinks, embedding: arrays
+- embedding contains numeric values
+- embeddingMetadata: nested document containing model/provider strings and
+  createdAt date
+- Some sampled fields, such as assignee and storyPoints, were null.
+
+conversation_history — 1 document available:
+Five samples are not available because this collection contains only one document.
+
+Structure observed:
+- _id: ObjectId
+- sessionId: string
+- messages: array of documents
+- Each sampled message has a type string (human or ai) and a nested data document.
+  The data document can contain content and other metadata/tool-call fields.
+
+The available document contains six messages: three human and three ai. Message
+content was not included in the sample display.
+
+generation_memory — 3 documents available:
+Five samples are not available because this collection contains only three documents.
+
+Examples from the three available records:
+- 6ace7158… — completed; generated test case TC_HC125_01:
+  "Successful WhatsApp delivery of encrypted PDF report after technician validation"
+- 6ace7211… — completed; generated test case TC_DOP_01:
+  "Successful consultation for a patient without an appointment"
+- 6ace731b… — completed; generated test case TC_ADMIN_01:
+  "Add new role to Laboratory successfully"
+
+Structure and types observed:
+- _id, memoryRecordId, conversationId, executionId, userQuery, status,
+  conversationSummary: ObjectId or strings as appropriate
+- generatedTestCases: array of nested documents containing testCaseId, module,
+  testCaseTitle, testCaseDescription, preconditions, testSteps, expectedResults,
+  priority, testType, riskLevel, and sourceCitations
+- retrievedDocumentReferences: array of nested documents with sourceNumber,
+  id, title, sourceType, and score
+- generationDate and completedAt: dates
+- executionMetadata: nested document containing status/provider/model strings,
+  boolean flags, and numeric token/count fields
+- persistenceWarnings: array
+
+Overall:
+TestCase and UserStory contain most of the records. conversation_history and
+generation_memory currently have only one and three documents, respectively.
